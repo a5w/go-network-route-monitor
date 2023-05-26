@@ -1,0 +1,7 @@
+hosts:
+  - name: Google
+    address: google.com
+    port: 80
+  - name: tunnel3
+    address: 172.21.3.40
+    port: 8080
