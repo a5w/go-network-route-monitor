@@ -18,7 +18,7 @@ import (
 // Host Struct
 
 type Host struct {
-	Name    string `yaml:"name`
+	Name    string `yaml:"name"`
 	Address string `yaml:"address"`
 	Port    int    `yaml:"port"`
 }
@@ -51,7 +51,7 @@ var (
 			Name: "network_route_up",
 			Help: "Indicates whether the network route is up. 1 = up, 0 = down",
 		},
-		[]string{"endpoint"},
+		[]string{"name", "endpoint"},
 	)
 )
 
@@ -62,19 +62,20 @@ func init() {
 
 // Checks whether a network route is up by attempting to establish a TCP connection.
 // If the connection succeeds, the route is up. If it fails, the route is down.
-func checkNetworkRoute(endpoint string) {
+func checkNetworkRoute(name string, endpoint string) {
 	_, err := net.DialTimeout("tcp", endpoint, 1*time.Second)
 	if err != nil {
-		networkRouteUp.WithLabelValues(endpoint).Set(0)
+		networkRouteUp.WithLabelValues(name, endpoint).Set(0)
 	} else {
-		networkRouteUp.WithLabelValues(endpoint).Set(1)
+		networkRouteUp.WithLabelValues(name, endpoint).Set(1)
 	}
 }
 
 // Loop all over endpoints and check each one.
-func checkAllNetworkRoutes(endpoints []string) {
-	for _, endpoint := range endpoints {
-		checkNetworkRoute(endpoint)
+func checkAllNetworkRoutes(hosts []Host) {
+	for _, host := range hosts {
+		endpoint := fmt.Sprintf("%s:%d", host.Address, host.Port)
+		checkNetworkRoute(host.Name, endpoint)
 	}
 }
 
@@ -90,23 +91,24 @@ func main() {
 	config, err := readConfig(*configPath)
 
 	if err != nil {
-		log.Fatal("Error reading hosts yaml file: %v", err)
+		log.Fatalf("Error reading hosts yaml file: %v", err)
 	}
 
 	// Creating a list of endpoints from config.
-	endpoints := make([]string, len(config.Hosts))
+	// endpoints := make([]string, len(config.Hosts))
 
-	for i, host := range config.Hosts {
-		endpoints[i] = fmt.Sprintf("%s:%d", host.Address, host.Port)
-	}
+	// for i, host := range config.Hosts {
+	// 	endpoints[i] = fmt.Sprintf("%s:%d", host.Address, host.Port)
+	// }
 
 	// check the endpoints every 5 seconds
 	go func() {
 		for range time.Tick(5 * time.Second) {
-			checkAllNetworkRoutes(endpoints)
+			checkAllNetworkRoutes(config.Hosts)
 		}
 	}()
 
+	log.Println("Starting server on port 2112...")
 	http.Handle("/metrics", promhttp.Handler())
 	log.Fatal(http.ListenAndServe(":2112", nil))
 }
